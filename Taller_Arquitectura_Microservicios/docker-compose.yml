@@ -126,6 +126,27 @@ services:
       - microservices-network
     restart: unless-stopped
 
+  # ============================================
+  # MCP Server - Model Context Protocol
+  # ============================================
+  mcp-server:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    container_name: mcp-server
+    ports:
+      - "3004:3004"
+    environment:
+      - PORT=3004
+      - BACKEND_PRODUCTS_URL=http://products-service:3001
+      - BACKEND_ORDERS_URL=http://orders-service:3002
+    depends_on:
+      - products-service
+      - orders-service
+    networks:
+      - microservices-network
+    restart: unless-stopped
+
 networks:
   microservices-network:
     driver: bridge

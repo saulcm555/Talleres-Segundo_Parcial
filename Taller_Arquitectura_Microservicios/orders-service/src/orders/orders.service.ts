@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -17,6 +17,36 @@ export class OrdersService {
     @Inject('EVENTS_SERVICE') private eventsClient: ClientProxy,
     private redisService: RedisService,
   ) {}
+
+  // ============================================
+  // REST API Methods (para MCP)
+  // ============================================
+
+  /**
+   * Obtener todas las órdenes
+   */
+  async findAll(): Promise<Order[]> {
+    this.logger.log('Getting all orders');
+    return this.orderRepository.find({
+      order: { id: 'DESC' },
+    });
+  }
+
+  /**
+   * Obtener orden por ID
+   */
+  async findById(id: string): Promise<Order> {
+    this.logger.log(`Getting order by ID: ${id}`);
+    const order = await this.orderRepository.findOne({ where: { id } });
+    if (!order) {
+      throw new NotFoundException(`Order with ID ${id} not found`);
+    }
+    return order;
+  }
+
+  // ============================================
+  // Core Business Methods
+  // ============================================
 
   async createOrder(dto: { productId: string; quantity: number }) {
     const idempotencyKey = uuidv4();
