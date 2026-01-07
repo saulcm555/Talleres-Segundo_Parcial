@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -14,8 +14,39 @@ export class OrdersService {
     @InjectRepository(Order)
     private orderRepository: Repository<Order>,
     @Inject('PRODUCTS_SERVICE') private productsClient: ClientProxy,
+    @Inject('EVENTS_SERVICE') private eventsClient: ClientProxy,
     private redisService: RedisService,
   ) {}
+
+  // ============================================
+  // REST API Methods (para MCP)
+  // ============================================
+
+  /**
+   * Obtener todas las órdenes
+   */
+  async findAll(): Promise<Order[]> {
+    this.logger.log('Getting all orders');
+    return this.orderRepository.find({
+      order: { id: 'DESC' },
+    });
+  }
+
+  /**
+   * Obtener orden por ID
+   */
+  async findById(id: string): Promise<Order> {
+    this.logger.log(`Getting order by ID: ${id}`);
+    const order = await this.orderRepository.findOne({ where: { id } });
+    if (!order) {
+      throw new NotFoundException(`Order with ID ${id} not found`);
+    }
+    return order;
+  }
+
+  // ============================================
+  // Core Business Methods
+  // ============================================
 
   async createOrder(dto: { productId: string; quantity: number }) {
     const idempotencyKey = uuidv4();
@@ -85,6 +116,27 @@ export class OrdersService {
       }
 
       await this.orderRepository.save(order);
+
+      // Emitir eventos de dominio según el resultado
+      const eventPayload = {
+        orderId: order.id,
+        status: order.status,
+        productId: data.productId,
+        quantity: data.quantity,
+        idempotencyKey: data.idempotencyKey,
+        timestamp: new Date().toISOString(),
+      };
+
+      if (data.approved) {
+        this.logger.log(`📤 Emitting event: order.confirmed for order ${order.id}`);
+        this.eventsClient.emit('order.confirmed', eventPayload);
+      } else {
+        this.logger.log(`📤 Emitting event: order.cancelled for order ${order.id}`);
+        this.eventsClient.emit('order.cancelled', {
+          ...eventPayload,
+          reason: data.reason || 'STOCK_NOT_AVAILABLE',
+        });
+      }
 
       // Marcar mensaje como procesado (TTL 24 horas)
       await this.redisService.set(cacheKey, 'true', 86400);

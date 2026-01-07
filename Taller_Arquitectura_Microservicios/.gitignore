@@ -15,8 +15,8 @@ build/
 *.sqlite
 *.sqlite3
 
-# Variables de entorno (mantener .env como ejemplo)
-# .env
+# Variables de entorno - NUNCA subir .env con keys reales
+.env
 
 # Logs
 logs/
